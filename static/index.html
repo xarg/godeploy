@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>fabric-union</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <!-- Le styles -->
+    <link href="css/bootstrap.css" rel="stylesheet">
+    <style>
+      body { padding-top: 60px; /* 60px to make the container go all the way
+      to the bottom of the topbar */ }
+    </style>
+    <link href="css/bootstrap-responsive.css" rel="stylesheet">
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js">
+      </script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="navbar navbar-fixed-top navbar-inverse">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="#">
+            fabric-union
+          </a>
+          <ul class="nav">
+            <li><a href="#listLogs">History</a></li>
+            <li><a href="#listJobs">All jobs</a></li>
+         </ul>
+         <a href="#runAllJobs" class="btn btn-primary pull-right">Run All Jobs</a>
+        </div>
+      </div>
+    </div>
+    <div class="container">
+
+      <ul class="breadcrumb">
+        <li><a href="#">Home</a> <span class="divider">/</span></li>
+        <li class="active">History</li>
+      </ul>
+      <div id="main">Loading... Please Wait.</div>
+      <script type='text/template' id='jobListTemplate'>
+          <h2>Jobs</h2>
+          <table id='jobsGrid' class="table table-bordered table-striped">
+              <tr>
+                  <th>Job</th>
+                  <th>&nbsp;</th>
+              </tr>
+              <% if ($.isEmptyObject(jobs)) { %>
+                  <tr><td colspan='5'>No Record Found</td></tr>
+              <% } else {
+                  $.each(jobs, function () { %>
+                  <tr data-id=<%= this %>>
+                      <td><%= this %></td>
+                      <td align='center'>
+                        <a class="btn btn-primary" href='#/runJob/<%= this %>'>Run</a> <a class="btn" href='#/history/<%= this %>'>History</a>
+                      </td>
+                  </tr>
+                  <%
+                  })
+              }%>
+          </table>
+       </script> 
+       <script type='text/template' id='logListTemplate'>
+          <h2>Jobs history</h2>
+          <table id='logsGrid' class="table table-bordered table-striped">
+              <tr>
+                  <th>Status</th>
+                  <th>Job</th>
+                  <th>User</th>
+                  <th>Date Started</th>
+                  <th>Duration</th>
+                  <th>&nbsp;</th>
+              </tr>
+              <% if ($.isEmptyObject(logs)) { %>
+                  <tr><td colspan='4'>No Record Found</td></tr>
+              <% } else {
+                  $.each(logs, function () { 
+                  date = new Date(this.Time * 1000); %>
+                  <tr data-id=<%= this.Path %>>
+                      <td><span class="label label-success">Success</span></td>
+                      <td><%= this.Name %></td>
+                      <td><%= this.User %></td>
+                      <td><%= date %></td>
+                      <td>5s</td>
+                      <td align='center'>
+                        <a class="btn" href='#/viewLog/<%= this.Path %>'>View</a>
+                      </td>
+                  </tr>
+                  <%
+                  })
+              }%>
+          </table> 
+          <ul class="pager">
+            <li><a href="#">Previous</a></li>
+            <li><a href="#">Next</a></li>
+          </ul>
+       </script>
+
+       <script type='text/template' id='viewLogTemplate'>
+          <h2>Log</h2>
+          <% if ($.isEmptyObject(body)) { %>
+              <div id="logBody">No log found</div>
+          <% } else { %>
+              <pre id="logBody"><%= body %></pre>
+          <% } %>
+       </script>
+       <script type='text/template' id='runJobTemplate'>
+          <h2>Running...</h2>
+          <pre id="jobBody"></pre>
+       </script>
+      </div>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js">
+    </script>
+    <script src="js/bootstrap.js"></script>
+    <script src="js/underscore-min.js"></script>
+    <script src="js/backbone-min.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+
+</html>
