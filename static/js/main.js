@@ -1,4 +1,4 @@
-var FU = {
+var GD = {
     run: function () {
         // initializing views
         this.jobsView = new this.jobsView();
@@ -15,13 +15,13 @@ var FU = {
     }
 };
 
-FU.Breadcrumbs = {
+GD.Breadcrumbs = {
     'listLogs': 'Logs',
     'viewLog': 'viewLog',
     'runJob': 'Run job',
 }
 /* Router */
-FU.Router = Backbone.Router.extend({
+GD.Router = Backbone.Router.extend({
     routes: {
         'listLogs': 'renderListLogs',
         'viewLog/:id': 'renderViewLog',
@@ -30,22 +30,22 @@ FU.Router = Backbone.Router.extend({
         'runJob/:id': 'renderRunJob', 
     },
     renderListLogs: function () {
-        FU.logsView.listLogs();
+        GD.logsView.listLogs();
     },
     renderViewLog: function (id) {
-        FU.logsView.viewLog(id);
+        GD.logsView.viewLog(id);
     },
 
     renderListJobs: function () {
-        FU.jobsView.listJobs();
+        GD.jobsView.listJobs();
     },
     renderRunJob: function (id) {
-        FU.jobsView.runJob(id);
+        GD.jobsView.runJob(id);
     },
 });
 
 /* Models */
-FU.jobModel = Backbone.Model.extend({
+GD.jobModel = Backbone.Model.extend({
     sync: function (method, model, options) {
         if (method === 'create' || method === 'update') {
             return $.ajax({
@@ -59,7 +59,7 @@ FU.jobModel = Backbone.Model.extend({
                     $('span.false').html('');
                     if (data.success === true) {
                         if (method === 'update') {
-                            FU.router.navigate('list_contacts', {trigger: true});
+                            GD.router.navigate('list_contacts', {trigger: true});
                         } else {
                             $('form').get(0).reset();
                         }
@@ -84,26 +84,26 @@ FU.jobModel = Backbone.Model.extend({
     }
 });
 
-FU.logModel = Backbone.Model.extend({
+GD.logModel = Backbone.Model.extend({
     sync: function (method, model, options) {
 
     }
 })
 
 /* Collections */
-FU.jobCollection = Backbone.Collection.extend({
-    model: FU.jobModel,
+GD.jobCollection = Backbone.Collection.extend({
+    model: GD.jobModel,
     url: "/jobs"
 });
 
-FU.logCollection = Backbone.Collection.extend({
-    model: FU.logModel,
+GD.logCollection = Backbone.Collection.extend({
+    model: GD.logModel,
     url: "/logs"
 });
 
 
 /* Views */
-FU.jobsView = Backbone.View.extend({
+GD.jobsView = Backbone.View.extend({
     el: '#main',
     listTemplate: _.template($('#jobListTemplate').html()),
     runTemplate: _.template($('#runJobTemplate').html()),
@@ -112,7 +112,7 @@ FU.jobsView = Backbone.View.extend({
     },
     listJobs: function () {
         var self = this;
-        FU.jobCollection.fetch({
+        GD.jobCollection.fetch({
             success: function (collection, response) {
                 self.$el.html(self.listTemplate({jobs: response}));
             }
@@ -127,7 +127,7 @@ FU.jobsView = Backbone.View.extend({
     }
 });
 
-FU.logsView = Backbone.View.extend({
+GD.logsView = Backbone.View.extend({
     el: '#main',
     listTemplate: _.template($('#logListTemplate').html()),
     viewTemplate: _.template($('#viewLogTemplate').html()),
@@ -136,7 +136,7 @@ FU.logsView = Backbone.View.extend({
     },
     listLogs: function () {
         var self = this;
-        FU.logCollection.fetch({
+        GD.logCollection.fetch({
             success: function (collection, response) {
                 self.$el.html(self.listTemplate({logs: response}));
             }
@@ -144,7 +144,7 @@ FU.logsView = Backbone.View.extend({
     },
     viewLog: function (id) {
         var self = this;
-        FU.logCollection.fetch({
+        GD.logCollection.fetch({
             data: "name=" + id,
             success: function (collection, response) {
                 self.$el.html(self.viewTemplate({body: response.body}));
@@ -154,5 +154,5 @@ FU.logsView = Backbone.View.extend({
 });
 
 $(function () {
-    FU.run();
+    GD.run();
 });
