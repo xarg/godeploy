@@ -19,15 +19,15 @@ What you need to do now to use run the above fabric script using *godeploy* is t
 
 	godeploy -d ./your_fabric_scripts -l /tmp/
 
-Navigate to: http://localhost:8000/#listJobs and run your script throw *godeploy*
+Navigate to: http://localhost:8000/#listJobs and run your script using *godeploy*
 
 Features
 --------
 
 - Run any bash script in a nice web interface.
-- Realtime feedback (see the progress of your scripts as the execute)
+- Realtime feedback (see the progress of your scripts as they execute)
 - Logs - currently in a directory (no database needed)
-- No dependencies
+- Search your logs (comming next)
 
 Components
 ----------
