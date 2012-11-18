@@ -5,7 +5,7 @@ godeploy
 
 Just point to the your fabric scripts and logs directories and that's it.
 
-![Screenshot godeploy](static/screenshot_godeploy.png)
+![Screenshot godeploy](https://raw.github.com/gymglish/godeploy/master/static/screenshot_godeploy.png)
 
 Usage
 -----
