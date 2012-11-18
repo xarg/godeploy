@@ -14,7 +14,8 @@ Imagine you have a fabric command:
 
 What you need to do now to use run the above fabric script using *godeploy* is to put it in a bash script:
 
-	echo "#\!/bin/bash\nfab -Hprod1 django.deploy:branch=master" > django_deploy.sh; chmod +x django_deploy.sh
+	echo '#!/bin/bash
+fab -Hprod1 django.deploy:branch=master' > django_deploy.sh; chmod +x django_deploy.sh
 
 	godeploy -d ./your_fabric_scripts -l /tmp/
 
