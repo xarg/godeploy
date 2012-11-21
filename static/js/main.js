@@ -121,9 +121,10 @@ GD.jobsView = Backbone.View.extend({
     runJob: function(id) {
         var self = this;
         self.$el.html(self.runTemplate());
-        $.get("/run/" + id, function(data){
-            $("#jobBody").text(data);
-        });
+        // run remote command and print the results in the iframe
+        // WebSockets? This hack is to easy not to use so no WS fo now.
+        var frame = $("<iframe id='jobFrame' style='width: 100%; border: none' src='/run/" + id + "'>")
+        $("#jobBody").append(frame);
     }
 });
 

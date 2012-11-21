@@ -8,6 +8,7 @@
     <meta name="author" content="">
     <!-- Le styles -->
     <link href="css/bootstrap.css" rel="stylesheet">
+    <link href="css/main.css" rel="stylesheet">
     <style>
       body { padding-top: 60px; /* 60px to make the container go all the way
       to the bottom of the topbar */ }
@@ -108,8 +109,9 @@
           <% } %>
        </script>
        <script type='text/template' id='runJobTemplate'>
-          <h2>Running...</h2>
-          <pre id="jobBody"></pre>
+       <div class="container fill">
+        <pre id="jobBody"></pre>
+       </div>
        </script>
       </div>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js">

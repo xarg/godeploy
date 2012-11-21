@@ -102,13 +102,15 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 func runHandler(response http.ResponseWriter, r *http.Request) {
 	// forcing the output content type
 	header := response.Header()
-	header["Content-Type"] = []string{"text/plain"}
 
-	// we'll launch the command in a goroutine
-	outChan := make(chan string)
-	errChan := make(chan error)
+	// for some reason if text/plain is passed
+	// Chrome thinks it's a application/octet-stream and tries
+	// to download the log.
+	header["Content-Type"] = []string{"text/html; charset=UTF-8"}
+	header["Connection"] = []string{"close"}
+	header["Vary"] = []string{"User-Agent"}
+
 	jobName := r.URL.Path[len("/run/"):]
-	go runCommand(jobName, outChan, errChan)
 
 	userName := "Anonymous"
 	startTime := time.Now().UTC() // Always use UTC time
@@ -119,32 +121,47 @@ func runHandler(response http.ResponseWriter, r *http.Request) {
 	}
 
 	firstLine := "Started at " + startTime.Format("Mon Jan 2 15:04:05 -0700 MST 2006") + " by " + userName
-	sep := "\n==========================\n\n"
-	fmt.Fprintf(response, firstLine)
-	logFilePath, err := NewLogEntry(logEntry, []byte(firstLine+sep))
+	firstLine = firstLine + "\n==========================\n\n"
+	fmt.Fprintf(response, "<pre>"+firstLine)
+	logFilePath, err := NewLogEntry(logEntry, firstLine)
 	if err != nil {
-		log.Fatal("Failed to create a new log entry: ", err)
+		log.Print("Failed to create a new log entry: ", err)
 	}
-	logFileFd, err := os.OpenFile(logFilePath, os.O_APPEND, 0600)
-	defer logFileFd.Close()
 
+	// we'll launch the command in a goroutine
+	outChan := make(chan string)
+	errChan := make(chan error)
+	go runCommand(jobName, outChan, errChan)
 	// we have two channels. The error and the command output channel
 	// the error channel is used to get the errors thrown while running
 	// the job and the output channel is for returning the output
 	for {
 		select {
 		case content, closed := <-outChan:
+			// os.APPEND does not work here for some reason
+			logFileFd, _ := os.OpenFile(logFilePath, os.O_WRONLY, 0666)
+			// go to the end of the file
+			logFileFd.Seek(0, os.SEEK_END)
+			logFileFd.WriteString(content)
+			logFileFd.Close()
+
+			fmt.Fprintf(response, content)
+			response.(http.Flusher).Flush()
 			if !closed {
+				fmt.Fprintf(response, "</pre>") // close <pre>
 				log.Print("Finished job: " + jobName)
 				return
 			}
-			logFileFd.Write([]byte(content))
-			fmt.Fprintf(response, content)
-			response.(http.Flusher).Flush()
 		case err, _ := <-errChan:
 			log.Print(err)
+			// os.APPEND does not work here for some reason
+			logFileFd, _ := os.OpenFile(logFilePath, os.O_WRONLY, 0666)
+			// go to the end of the file
+
 			errStr := "INTERNAL: " + err.Error()
-			logFileFd.Write([]byte(errStr))
+			logFileFd.Seek(0, os.SEEK_END)
+			logFileFd.WriteString(errStr)
+			logFileFd.Close()
 
 			fmt.Fprintf(response, errStr)
 			response.(http.Flusher).Flush()

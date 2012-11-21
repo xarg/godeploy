@@ -36,13 +36,13 @@ func (s ByTime) Less(i, j int) bool {
 }
 
 //Create a new log file, write the data and return the filepath
-func NewLogEntry(job JobLogEntry, data []byte) (string, error) {
+func NewLogEntry(job JobLogEntry, data string) (string, error) {
 	newLogFile := "FU-" + job.Name + "-" + job.User + "-" + fmt.Sprintf("%d", job.Time)
 	newLogFile = filepath.Join(*logPath, newLogFile)
 	fd, err := os.Create(newLogFile)
+	defer fd.Close()
 	if err == nil {
-		defer fd.Close()
-		_, err = fd.Write(data)
+		_, err = fd.WriteString(data)
 		if err != nil {
 			return newLogFile, err
 		}
