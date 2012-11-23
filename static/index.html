@@ -56,7 +56,7 @@
                   <tr data-id=<%= this %>>
                       <td><%= this %></td>
                       <td align='center'>
-                        <a class="btn btn-primary" href='#/runJob/<%= this %>'>Run</a> <a class="btn" href='#/history/<%= this %>'>History</a>
+                        <a class="btn btn-primary" href='#/runJob/<%= this %>'>Run</a> <a class="btn" href='#/listLogs/<%= this %>'>History</a>
                       </td>
                   </tr>
                   <%
@@ -81,11 +81,18 @@
                   $.each(logs, function () { 
                   date = new Date(this.Time * 1000); %>
                   <tr data-id=<%= this.Path %>>
-                      <td><span class="label label-success">Success</span></td>
+		      <td>
+			<% if (this.Status == 0 ) { %>
+			<span class="label label-success">Success</span>
+			<% } else { %>
+			<span class="label label-important">Failure</span>
+			<span class="badge badge-important"><%= this.Status %></span>
+			<% } %>
+		      </td>
                       <td><%= this.Name %></td>
                       <td><%= this.User %></td>
                       <td><%= date %></td>
-                      <td>5s</td>
+		      <td><%= this.Duration %>s</td>
                       <td align='center'>
                         <a class="btn" href='#/viewLog/<%= this.Path %>'>View</a>
                       </td>

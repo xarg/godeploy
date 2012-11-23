@@ -1,9 +1,6 @@
-/* */
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+	"strings"
+	"strconv"
 )
 
 //execute commands only from this directory
@@ -60,7 +59,7 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 	cmdPath, err := validateCmd(command)
 	if err != nil {
 		errChan <- err
-		log.Print(err)
+		log.Print("Invalid command: ", err)
 		return
 	}
 
@@ -92,10 +91,8 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 	close(outChan)
 
 	// report any errors
-	if err := cmd.Wait(); err != nil {
-		errChan <- err
-		return
-	}
+	err = cmd.Wait();
+	errChan <- err
 }
 
 /* /run/ - this handler will send the output of a running command */
@@ -139,6 +136,7 @@ func runHandler(response http.ResponseWriter, r *http.Request) {
 		select {
 		case content, closed := <-outChan:
 			// os.APPEND does not work here for some reason
+			log.Print("Writing content to " + logFilePath)
 			logFileFd, _ := os.OpenFile(logFilePath, os.O_WRONLY, 0666)
 			// go to the end of the file
 			logFileFd.Seek(0, os.SEEK_END)
@@ -147,18 +145,28 @@ func runHandler(response http.ResponseWriter, r *http.Request) {
 
 			fmt.Fprintf(response, content)
 			response.(http.Flusher).Flush()
+			
 			if !closed {
+				secondsSince := time.Since(startTime).Seconds()
+				logFilePath = RenameLogFile(logFilePath, secondsSince, "0")
 				fmt.Fprintf(response, "</pre>") // close <pre>
 				log.Print("Finished job: " + jobName)
-				return
 			}
 		case err, _ := <-errChan:
-			log.Print(err)
+			log.Print("Received an error: ", err)
 			// os.APPEND does not work here for some reason
-			logFileFd, _ := os.OpenFile(logFilePath, os.O_WRONLY, 0666)
 			// go to the end of the file
+			errStr := err.Error()
+			if err != nil {
+				if strings.Contains(errStr, "exit status") {
+					msgparts := strings.Split(err.Error(), " ")
+					status := msgparts[2]
+					logFilePath = RenameLogFile(logFilePath, time.Since(startTime).Seconds(), status)
+				}
+			}
 
-			errStr := "INTERNAL: " + err.Error()
+			log.Print("Opening the log file: " + logFilePath)
+			logFileFd, _ := os.OpenFile(logFilePath, os.O_WRONLY, 0666)
 			logFileFd.Seek(0, os.SEEK_END)
 			logFileFd.WriteString(errStr)
 			logFileFd.Close()
@@ -170,12 +178,19 @@ func runHandler(response http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func toBase64(data string) string {
-	var buf bytes.Buffer
-	encoder := base64.NewEncoder(base64.StdEncoding, &buf)
-	encoder.Write([]byte(data))
-	encoder.Close()
-	return buf.String()
+// update the log filename with the new duration and 
+func RenameLogFile(filepath string, duration float64, status string) string {
+	parts := strings.Split(filepath, "-")
+	durationStr := strconv.FormatFloat(duration, 'f', 0, 64)
+
+	parts[4] = durationStr
+	parts[5] = status
+	newLogPath := strings.Join(parts, "-")
+	err := os.Rename(filepath, newLogPath)
+	if err != nil {
+		log.Print("Failed to rename log file ", err)
+	}
+	return newLogPath
 }
 
 /* /logs will return the latest logs ordered by date from the logs folder */
@@ -189,17 +204,19 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("name") != "" {
 		data := make(map[string]string, 1)
 		body, err := LogEntryBody(r.FormValue("name"))
-		data["body"] = string(body)
 		if err != nil {
-			log.Print(err)
+			log.Print("Failed to get log entry body ", err)
 			fmt.Fprintf(w, err.Error())
 		}
+
+		data["body"] = string(body)
 		dataJson, err = json.Marshal(data)
 		if err != nil {
 			log.Print("Failed to encode json: ", err)
 		}
 	} else {
-		data := LogEntries()
+		job := r.FormValue("job")
+		data := LogEntries(job)
 		dataJson, err = json.Marshal(data)
 		if err != nil {
 			log.Print("Failed to encode json: ", err)
@@ -216,7 +233,7 @@ func jobsHandler(w http.ResponseWriter, r *http.Request) {
 
 	entries, err := jobEntries()
 	if err != nil {
-		log.Printf("Error loading available jobs: ", err)
+		log.Print("Error loading available jobs: ", err)
 	}
 	dataJson, err := json.Marshal(entries)
 	if err != nil {

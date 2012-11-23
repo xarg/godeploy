@@ -15,22 +15,18 @@ var GD = {
     }
 };
 
-GD.Breadcrumbs = {
-    'listLogs': 'Logs',
-    'viewLog': 'viewLog',
-    'runJob': 'Run job',
-}
 /* Router */
 GD.Router = Backbone.Router.extend({
     routes: {
         'listLogs': 'renderListLogs',
+        'listLogs/:id': 'renderListLogs',
         'viewLog/:id': 'renderViewLog',
 
         'listJobs': 'renderListJobs',
         'runJob/:id': 'renderRunJob', 
     },
-    renderListLogs: function () {
-        GD.logsView.listLogs();
+    renderListLogs: function (id) {
+        GD.logsView.listLogs(id);
     },
     renderViewLog: function (id) {
         GD.logsView.viewLog(id);
@@ -135,9 +131,14 @@ GD.logsView = Backbone.View.extend({
     initialize: function () {
         _.bindAll(this, 'listLogs', 'viewLog');
     },
-    listLogs: function () {
+    listLogs: function (id) {
         var self = this;
+        var data = "";
+        if (id) {
+            data = "job=" + id;
+        }
         GD.logCollection.fetch({
+            data: data,
             success: function (collection, response) {
                 self.$el.html(self.listTemplate({logs: response}));
             }

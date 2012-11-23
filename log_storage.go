@@ -13,12 +13,14 @@ import (
 
 var logPath = flag.String("d", "./logs", "Logs directory")
 
-// log files have the following form: FU-<job-name>-<user>-<time>
+// log files have the following form: GD-<job-name>-<user>-<time>-<duration>
 type JobLogEntry struct {
 	Path string // Path to the log entry
 	Name string // job name
 	User string // the user that started the
 	Time int64  // when was it started
+	Duration float64// duration in seconds
+	Status int64  // 0-255 - status code returned by the job
 }
 
 type JobLogEntries []*JobLogEntry
@@ -37,7 +39,12 @@ func (s ByTime) Less(i, j int) bool {
 
 //Create a new log file, write the data and return the filepath
 func NewLogEntry(job JobLogEntry, data string) (string, error) {
-	newLogFile := "FU-" + job.Name + "-" + job.User + "-" + fmt.Sprintf("%d", job.Time)
+	newLogFile := "GD-" + job.Name 
+	newLogFile += "-" + job.User 
+	newLogFile += "-" + fmt.Sprintf("%d", job.Time)
+	newLogFile += "-" + fmt.Sprintf("%d", int(job.Duration))
+	newLogFile += "-" + fmt.Sprintf("%d", job.Status)
+
 	newLogFile = filepath.Join(*logPath, newLogFile)
 	fd, err := os.Create(newLogFile)
 	defer fd.Close()
@@ -54,7 +61,7 @@ func NewLogEntry(job JobLogEntry, data string) (string, error) {
 
 // given the names of the log files return all the log job entries
 // sorted by time
-func LogEntries() JobLogEntries {
+func LogEntries(job string) JobLogEntries {
 	var entries JobLogEntries
 	filepath.Walk(*logPath,
 		func(path string, info os.FileInfo, err error) error {
@@ -67,15 +74,23 @@ func LogEntries() JobLogEntries {
 				return nil
 			}
 			fileName := info.Name()
-			if fileName[:2] == "FU" {
+			if fileName[:2] == "GD" {
 				parts := strings.Split(fileName, "-")
-				jobName, userName, time := parts[1], parts[2], parts[3]
+				jobName, userName, time, duration, status := parts[1], parts[2], parts[3], parts[4], parts[5]
+				if job != "" && jobName != job {
+					// filter by job's name if set
+					return nil
+				}
 				timeInt, _ := strconv.ParseInt(time, 10, 64)
+				durationFloat, _ := strconv.ParseFloat(duration, 64)
+				statusInt, _ := strconv.ParseInt(status, 10, 64)
 				logEntry := &JobLogEntry{
 					Path: fileName,
 					Name: jobName,
 					User: userName,
 					Time: timeInt,
+					Duration: durationFloat,
+					Status: statusInt,
 				}
 				entries = append(entries, logEntry)
 			}
