@@ -27,7 +27,6 @@ func jobEntries() ([]string, error) {
 	}
 	defer dir.Close()
 
-	// this reads the whole content of the dir. It may not be a good idea.
 	dirInfoSlice, _ := dir.Readdir(-1)
 	for _, fileinfo := range dirInfoSlice {
 		entries = append(entries, fileinfo.Name())
@@ -35,7 +34,7 @@ func jobEntries() ([]string, error) {
 	return entries, nil
 }
 
-// validates the commands and returns it's execution path
+// validates the command to be run and returns it's execution path
 func validateCmd(cmd string) (string, error) {
 	jobs, err := jobEntries()
 	if err != nil {
@@ -49,11 +48,9 @@ func validateCmd(cmd string) (string, error) {
 	return "", errors.New("Command not found")
 }
 
-/* Run the command and send back the results on a channel */
+/* Run the command and send back the results on channels */
 func runCommand(command string, outChan chan string, errChan chan error) {
-	// first check that we have the command file in the right place
-
-	// no matter what happens, close the channels
+	// no matter what happens, close the channel
 	defer close(errChan)
 
 	cmdPath, err := validateCmd(command)
@@ -77,26 +74,26 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 		return
 	}
 
-	// Read from .
 	outBuf := make([]byte, 1024)
+	// read from the stdout to the buffer
 	_, err = stdout.Read(outBuf)
-	// while we have stuff to read from the output 
+	// while we have stuff to read from the output
 	for err == nil {
 		// send the output of  the command to the channel
 		outChan <- string(outBuf)
-		// reading some more
+		// read some more
 		_, err = stdout.Read(outBuf)
 	}
 	// nothing more to send.. we can close the channel here
 	close(outChan)
 
-	// report any errors
+	// report any errors including the exit code of the command
 	err = cmd.Wait()
 	errChan <- err
 }
 
 /* /run/ - this handler will send the output of a running command */
-func runHandler(response http.ResponseWriter, r *http.Request) {
+func runHandler(response http.ResponseWriter, request *http.Request) {
 	// forcing the output content type
 	header := response.Header()
 
@@ -107,10 +104,11 @@ func runHandler(response http.ResponseWriter, r *http.Request) {
 	header["Connection"] = []string{"close"}
 	header["Vary"] = []string{"User-Agent"}
 
-	jobName := r.URL.Path[len("/run/"):]
-
+	jobName := request.URL.Path[len("/run/"):]
+	// TODO: fix this and use the HTTP headers with user authentication
 	userName := "Anonymous"
-	startTime := time.Now().UTC() // Always use UTC time
+	startTime := time.Now().UTC()
+
 	logEntry := JobLogEntry{
 		Name: jobName,
 		User: userName,
@@ -119,30 +117,29 @@ func runHandler(response http.ResponseWriter, r *http.Request) {
 
 	firstLine := "Started at " + startTime.Format("Mon Jan 2 15:04:05 -0700 MST 2006") + " by " + userName
 	firstLine = firstLine + "\n==========================\n\n"
+	// Adding a <pre> here because we want pretty output
+	// the browser. We close it at end when we finished reading
+	// from the command's output
 	fmt.Fprintf(response, "<pre>"+firstLine)
 	logFilePath, err := NewLogEntry(logEntry, firstLine)
 	if err != nil {
 		log.Print("Failed to create a new log entry: ", err)
 	}
 
-	// we'll launch the command in a goroutine
+	log.Print("Started job: " + jobName)
+	// We'll use two channels. The error and the command output channel
+	// the error channel is used to get the errors thrown while running
+	// the job and the output channel is for returning the output of 
+	// the command
 	outChan := make(chan string)
 	errChan := make(chan error)
 	go runCommand(jobName, outChan, errChan)
-	// we have two channels. The error and the command output channel
-	// the error channel is used to get the errors thrown while running
-	// the job and the output channel is for returning the output
+
+	// TODO: perhaps implement some kind of timeout?
 	for {
 		select {
 		case content, closed := <-outChan:
-			// os.APPEND does not work here for some reason
-			log.Print("Writing content to " + logFilePath)
-			logFileFd, _ := os.OpenFile(logFilePath, os.O_WRONLY, 0666)
-			// go to the end of the file
-			logFileFd.Seek(0, os.SEEK_END)
-			logFileFd.WriteString(content)
-			logFileFd.Close()
-
+			AppendLog(logFilePath, content)
 			fmt.Fprintf(response, content)
 			response.(http.Flusher).Flush()
 
@@ -154,22 +151,22 @@ func runHandler(response http.ResponseWriter, r *http.Request) {
 			}
 		case err, _ := <-errChan:
 			log.Print("Received an error: ", err)
-			// os.APPEND does not work here for some reason
-			// go to the end of the file
 			errStr := err.Error()
 			if err != nil {
+				// TODO: maybe there is another way to get the 
+				// exit status?
 				if strings.Contains(errStr, "exit status") {
+					// Ex: exit status 0
 					msgparts := strings.Split(err.Error(), " ")
+					// Ex: we get "0" here
 					status := msgparts[2]
+					// Rename the log file to store 
+					// the exit status
 					logFilePath = RenameLogFile(logFilePath, time.Since(startTime).Seconds(), status)
 				}
 			}
 
-			log.Print("Opening the log file: " + logFilePath)
-			logFileFd, _ := os.OpenFile(logFilePath, os.O_WRONLY, 0666)
-			logFileFd.Seek(0, os.SEEK_END)
-			logFileFd.WriteString(errStr)
-			logFileFd.Close()
+			AppendLog(logFilePath, errStr)
 
 			fmt.Fprintf(response, errStr)
 			response.(http.Flusher).Flush()

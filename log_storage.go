@@ -13,14 +13,13 @@ import (
 
 var logPath = flag.String("d", "./logs", "Logs directory")
 
-// log files have the following form: GD-<job-name>-<user>-<time>-<duration>
 type JobLogEntry struct {
-	Path string // Path to the log entry
-	Name string // job name
-	User string // the user that started the
-	Time int64  // when was it started
-	Duration float64// duration in seconds
-	Status int64  // 0-255 - status code returned by the job
+	Path     string  // Path to the log entry
+	Name     string  // job name
+	User     string  // the user that started the
+	Time     int64   // when was it started
+	Duration float64 // duration in seconds
+	Status   int64   // 0-255 - status code returned by the job
 }
 
 type JobLogEntries []*JobLogEntry
@@ -39,8 +38,10 @@ func (s ByTime) Less(i, j int) bool {
 
 //Create a new log file, write the data and return the filepath
 func NewLogEntry(job JobLogEntry, data string) (string, error) {
-	newLogFile := "GD-" + job.Name 
-	newLogFile += "-" + job.User 
+	// log files have the following form: 
+	// GD-<job-name>-<user>-<time>-<duration>
+	newLogFile := "GD-" + job.Name
+	newLogFile += "-" + job.User
 	newLogFile += "-" + fmt.Sprintf("%d", job.Time)
 	newLogFile += "-" + fmt.Sprintf("%d", int(job.Duration))
 	newLogFile += "-" + fmt.Sprintf("%d", job.Status)
@@ -59,8 +60,7 @@ func NewLogEntry(job JobLogEntry, data string) (string, error) {
 	return newLogFile, nil
 }
 
-// given the names of the log files return all the log job entries
-// sorted by time
+// given the names of the job return all the log job entries ordered by time
 func LogEntries(job string) JobLogEntries {
 	var entries JobLogEntries
 	filepath.Walk(*logPath,
@@ -85,12 +85,12 @@ func LogEntries(job string) JobLogEntries {
 				durationFloat, _ := strconv.ParseFloat(duration, 64)
 				statusInt, _ := strconv.ParseInt(status, 10, 64)
 				logEntry := &JobLogEntry{
-					Path: fileName,
-					Name: jobName,
-					User: userName,
-					Time: timeInt,
+					Path:     fileName,
+					Name:     jobName,
+					User:     userName,
+					Time:     timeInt,
 					Duration: durationFloat,
-					Status: statusInt,
+					Status:   statusInt,
 				}
 				entries = append(entries, logEntry)
 			}
@@ -105,4 +105,20 @@ func LogEntries(job string) JobLogEntries {
 func LogEntryBody(name string) ([]byte, error) {
 	path := filepath.Join(*logPath, name)
 	return ioutil.ReadFile(path)
+}
+
+// append a string to a log file
+func AppendLog(logFilePath, log string) error {
+	// os.APPEND does not work here for some reason
+	// Why? Is it a bug? 
+	// We Seek to the end of the file instead
+	logFileFd, err := os.OpenFile(logFilePath, os.O_WRONLY, 0666)
+	defer logFileFd.Close()
+
+	if err != nil {
+		return err
+	}
+	logFileFd.Seek(0, os.SEEK_END)
+	logFileFd.WriteString(log)
+	return nil
 }
