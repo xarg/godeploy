@@ -12,11 +12,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-//execute commands only from this directory
+// execute commands only from this directory
 var cmdDir = flag.String("c", "./cmds", "Commands dir")
+// this lock is used to not allow 2 commands to run at once
+var commandLock *sync.Mutex
 
 // return a list of avaiable jobs that can be run
 func jobEntries() ([]string, error) {
@@ -82,16 +85,23 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 	stderrBuf := make([]byte, 1024)
 	// read from the stdout to the buffer
 
-	_, err = stdout.Read(stdoutBuf)
-	_, err = stderr.Read(stderrBuf)
+	_, errStdout := stdout.Read(stdoutBuf)
+	_, errStderr := stderr.Read(stderrBuf)
 	// while we have stuff to read from the output
-	for err == nil {
+	for errStdout == nil || errStderr == nil {
 		// send the output of  the command to the channel
-		outChan <- string(stdoutBuf)
-		outChan <- string(stderrBuf)
+		if errStdout == nil {
+			log.Print("sending stdout")
+			outChan <- string(stdoutBuf)
+		}
+		if errStderr == nil {
+			log.Print("sending stderr")
+			outChan <- string(stderrBuf)
+		}
+
 		// read some more
-		_, err = stdout.Read(stdoutBuf)
-		_, err = stderr.Read(stderrBuf)
+		_, errStdout = stdout.Read(stdoutBuf)
+		_, errStderr = stderr.Read(stderrBuf)
 	}
 	// nothing more to send.. we can close the channel here
 	close(outChan)
@@ -113,6 +123,7 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 	header["Connection"] = []string{"close"}
 	header["Vary"] = []string{"User-Agent"}
 
+	
 	jobName := request.URL.Path[len("/run/"):]
 	// TODO: fix this and use the HTTP headers with user authentication
 	userName := "Anonymous"
@@ -130,10 +141,15 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 	// the browser. We close it at end when we finished reading
 	// from the command's output
 	fmt.Fprintf(response, "<pre>"+firstLine)
+	response.(http.Flusher).Flush()
+
 	logFilePath, err := NewLogEntry(logEntry, firstLine)
 	if err != nil {
 		log.Print("Failed to create a new log entry: ", err)
 	}
+	// aquiring the lock. This will block the execution
+	commandLock.Lock()
+	defer commandLock.Unlock()
 
 	log.Print("Started job: " + jobName)
 	// We'll use two channels. The error and the command output channel
@@ -258,6 +274,8 @@ func DefaultWrapper(handler http.Handler) http.Handler {
 }
 
 func main() {
+	// create the lock
+	commandLock = new(sync.Mutex)
 	http.HandleFunc("/run/", runHandler)
 
 	http.HandleFunc("/logs", logsHandler)
