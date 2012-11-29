@@ -61,8 +61,12 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 	}
 
 	cmd := exec.Command(cmdPath)
-	// TODO: handle Stderr
 	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		errChan <- err
+		return
+	}
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		errChan <- err
 		return
@@ -74,15 +78,20 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 		return
 	}
 
-	outBuf := make([]byte, 1024)
+	stdoutBuf := make([]byte, 1024)
+	stderrBuf := make([]byte, 1024)
 	// read from the stdout to the buffer
-	_, err = stdout.Read(outBuf)
+
+	_, err = stdout.Read(stdoutBuf)
+	_, err = stderr.Read(stderrBuf)
 	// while we have stuff to read from the output
 	for err == nil {
 		// send the output of  the command to the channel
-		outChan <- string(outBuf)
+		outChan <- string(stdoutBuf)
+		outChan <- string(stderrBuf)
 		// read some more
-		_, err = stdout.Read(outBuf)
+		_, err = stdout.Read(stdoutBuf)
+		_, err = stderr.Read(stderrBuf)
 	}
 	// nothing more to send.. we can close the channel here
 	close(outChan)
@@ -151,8 +160,9 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 			}
 		case err, _ := <-errChan:
 			log.Print("Received an error: ", err)
-			errStr := err.Error()
+			errStr := ""
 			if err != nil {
+				errStr = err.Error()
 				// TODO: maybe there is another way to get the 
 				// exit status?
 				if strings.Contains(errStr, "exit status") {
