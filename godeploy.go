@@ -10,9 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
-	"strings"
 	"strconv"
+	"strings"
+	"time"
 )
 
 //execute commands only from this directory
@@ -91,7 +91,7 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 	close(outChan)
 
 	// report any errors
-	err = cmd.Wait();
+	err = cmd.Wait()
 	errChan <- err
 }
 
@@ -145,7 +145,7 @@ func runHandler(response http.ResponseWriter, r *http.Request) {
 
 			fmt.Fprintf(response, content)
 			response.(http.Flusher).Flush()
-			
+
 			if !closed {
 				secondsSince := time.Since(startTime).Seconds()
 				logFilePath = RenameLogFile(logFilePath, secondsSince, "0")
