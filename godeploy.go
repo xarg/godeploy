@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 // execute commands only from this directory
 var cmdDir = flag.String("c", "./cmds", "Commands dir")
+
 // this lock is used to not allow 2 commands to run at once
 var commandLock *sync.Mutex
 
@@ -51,6 +53,31 @@ func validateCmd(cmd string) (string, error) {
 	return "", errors.New("Command not found")
 }
 
+// this is a combined output channel used for both stdout and stderr pipes
+type combinedOutput struct {
+	data []byte
+	exit bool
+}
+
+func readPipe(pipe io.ReadCloser, pipeChan chan combinedOutput) {
+	buf := make([]byte, 1024)
+	_, err := pipe.Read(buf)
+
+	var out combinedOutput
+	for err == nil {
+		// send the output of  the command to the channel
+		out.data = buf
+		out.exit = false
+		pipeChan <- out
+
+		// read some more
+		_, err = pipe.Read(buf)
+	}
+	out.data = nil
+	out.exit = true
+	pipeChan <- out
+}
+
 /* Run the command and send back the results on channels */
 func runCommand(command string, outChan chan string, errChan chan error) {
 	// no matter what happens, close the channel
@@ -81,27 +108,21 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 		return
 	}
 
-	stdoutBuf := make([]byte, 1024)
-	stderrBuf := make([]byte, 1024)
-	// read from the stdout to the buffer
+	// combine the out from both pipes
+	comChan := make(chan combinedOutput)
+	go readPipe(stdout, comChan)
+	go readPipe(stderr, comChan)
 
-	_, errStdout := stdout.Read(stdoutBuf)
-	_, errStderr := stderr.Read(stderrBuf)
-	// while we have stuff to read from the output
-	for errStdout == nil || errStderr == nil {
-		// send the output of  the command to the channel
-		if errStdout == nil {
-			log.Print("sending stdout")
-			outChan <- string(stdoutBuf)
+	count := 0
+	for out := range comChan {
+		if out.exit == true {
+			if count == 1 {
+				//close(comChan)
+				break
+			}
+			count++
 		}
-		if errStderr == nil {
-			log.Print("sending stderr")
-			outChan <- string(stderrBuf)
-		}
-
-		// read some more
-		_, errStdout = stdout.Read(stdoutBuf)
-		_, errStderr = stderr.Read(stderrBuf)
+		outChan <- string(out.data)
 	}
 	// nothing more to send.. we can close the channel here
 	close(outChan)
@@ -123,7 +144,6 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 	header["Connection"] = []string{"close"}
 	header["Vary"] = []string{"User-Agent"}
 
-	
 	jobName := request.URL.Path[len("/run/"):]
 	// TODO: fix this and use the HTTP headers with user authentication
 	userName := "Anonymous"
@@ -166,7 +186,6 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 		case content, closed := <-outChan:
 			AppendLog(logFilePath, content)
 			fmt.Fprintf(response, content)
-			response.(http.Flusher).Flush()
 
 			if !closed {
 				secondsSince := time.Since(startTime).Seconds()
@@ -174,6 +193,7 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 				fmt.Fprintf(response, "</pre>") // close <pre>
 				log.Print("Finished job: " + jobName)
 			}
+			response.(http.Flusher).Flush()
 		case err, _ := <-errChan:
 			log.Print("Received an error: ", err)
 			errStr := ""
