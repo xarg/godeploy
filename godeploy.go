@@ -56,9 +56,10 @@ func validateCmd(cmd string) (string, error) {
 // this is a combined output channel used for both stdout and stderr pipes
 type combinedOutput struct {
 	data []byte
-	exit bool
+	exit bool // use this to signal that we ended reading from the pipe
 }
 
+// read from pipe (stdout/stderr) and send back using channel
 func readPipe(pipe io.ReadCloser, pipeChan chan combinedOutput) {
 	buf := make([]byte, 1024)
 	_, err := pipe.Read(buf)
@@ -236,6 +237,12 @@ func RenameLogFile(filepath string, duration float64, status string) string {
 	return newLogPath
 }
 
+// This will be useful for some pagination
+type ResponseLogs struct {
+	Entries JobLogEntries
+	Length int
+}
+
 /* /logs will return the latest logs ordered by date from the logs folder */
 func logsHandler(w http.ResponseWriter, r *http.Request) {
 	// forcing the output content type
@@ -243,7 +250,6 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 	header["Content-Type"] = []string{"application/json"}
 	// if we have a name of the log then we should get the contents of the log
 	var dataJson []byte
-	var err error
 	if r.FormValue("name") != "" {
 		data := make(map[string]string, 1)
 		body, err := LogEntryBody(r.FormValue("name"))
@@ -258,9 +264,34 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 			log.Print("Failed to encode json: ", err)
 		}
 	} else {
-		job := r.FormValue("job")
-		data := LogEntries(job)
-		dataJson, err = json.Marshal(data)
+		start := 0
+		offset := 50 // number of items per page
+		job := r.FormValue("job") // filter by job is any
+		logEntries := LogEntries(job)
+		logEntriesLen := len(logEntries)
+		if offset >= logEntriesLen {
+			offset = logEntriesLen
+		}
+
+		resp := ResponseLogs{
+			Entries: logEntries[start:offset],
+			Length: logEntriesLen,
+		}
+
+		page, err := strconv.ParseInt(r.FormValue("page"), 10, 32);
+		if  err == nil {
+			start = int(page) * offset
+			if start >= resp.Length {
+				start = resp.Length - offset
+			}
+			offset += start
+			if offset >= resp.Length {
+				offset = resp.Length
+			}
+			resp.Entries = resp.Entries[start:offset]
+		}
+
+		dataJson, err = json.Marshal(resp)
 		if err != nil {
 			log.Print("Failed to encode json: ", err)
 		}

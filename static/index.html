@@ -31,7 +31,9 @@
             <li><a href="#listLogs">History</a></li>
             <li><a href="#listJobs">All jobs</a></li>
          </ul>
+<!--
          <a href="#runAllJobs" class="btn btn-primary pull-right">Run All Jobs</a>
+-->
         </div>
       </div>
     </div>
@@ -56,7 +58,7 @@
                   <tr data-id=<%= this %>>
                       <td><%= this %></td>
                       <td align='center'>
-                        <a class="btn btn-primary" href='#/runJob/<%= this %>'>Run</a> <a class="btn" href='#/listLogs/<%= this %>'>History</a>
+                        <a class="btn btn-primary" href='#/runJob/<%= this %>'>Run</a> <a class="btn" href='#/listLogs/job/<%= this %>'>History</a>
                       </td>
                   </tr>
                   <%
@@ -102,8 +104,8 @@
               }%>
           </table> 
           <ul class="pager">
-            <li><a href="#">Previous</a></li>
-            <li><a href="#">Next</a></li>
+	    <li><a href="#listLogs/page/<%= previousPage %>">Previous</a></li>
+	    <li><a href="#listLogs/page/<%= nextPage %>">Next</a></li>
           </ul>
        </script>
 

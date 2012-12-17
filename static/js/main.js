@@ -19,14 +19,22 @@ var GD = {
 GD.Router = Backbone.Router.extend({
     routes: {
         'listLogs': 'renderListLogs',
-        'listLogs/:id': 'renderListLogs',
+        'listLogs/job/:id': 'renderListLogsJob',
+        'listLogs/page/:page': 'renderListLogsPage',
         'viewLog/:id': 'renderViewLog',
 
         'listJobs': 'renderListJobs',
         'runJob/:id': 'renderRunJob', 
+        //'runAllJobs': 'renderRunAllJobs', - don't know exaclty how to implement this yet
     },
-    renderListLogs: function (id) {
+    renderListLogs: function () {
+        GD.logsView.listLogs();
+    },
+    renderListLogsJob: function (id) {
         GD.logsView.listLogs(id);
+    },
+    renderListLogsPage: function (page) {
+        GD.logsView.listLogs(null, page);
     },
     renderViewLog: function (id) {
         GD.logsView.viewLog(id);
@@ -38,45 +46,15 @@ GD.Router = Backbone.Router.extend({
     renderRunJob: function (id) {
         GD.jobsView.runJob(id);
     },
+    renderRunAllJobs: function () {
+        GD.jobsView.runAllJobs();
+    },
 });
 
 /* Models */
 GD.jobModel = Backbone.Model.extend({
     sync: function (method, model, options) {
-        if (method === 'create' || method === 'update') {
-            return $.ajax({
-                dataType: 'json',
-                url: './addJob',
-                data: {
-                    id: (this.get('id') || ''), 
-                    cmd: (this.get('cmd') || '')
-                },
-                success: function (data) {
-                    $('span.false').html('');
-                    if (data.success === true) {
-                        if (method === 'update') {
-                            GD.router.navigate('list_contacts', {trigger: true});
-                        } else {
-                            $('form').get(0).reset();
-                        }
-                    } else {
-                        $.each(data.validationError, function () {
-                            $('span.' + this.target).html(this.error);
-                        });
-                    }
-                    $('span.success').html(data.msg).removeClass('false').addClass(data.success.toString());
-                }
-            });
-        } else if (method === 'delete') {
-            var id = this.get('id');
-            return $.getJSON('./deleteJob', { id: id }, function (data) {
-                if (data.success === true) {
-                    $('#jobsGrid tr[data-id="' + id + '"]').hide('slow');
-                } else {
-                    alert(data.msg);
-                }
-            });
-        }
+
     }
 });
 
@@ -104,7 +82,7 @@ GD.jobsView = Backbone.View.extend({
     listTemplate: _.template($('#jobListTemplate').html()),
     runTemplate: _.template($('#runJobTemplate').html()),
     initialize: function () {
-        _.bindAll(this, 'listJobs', 'runJob');
+        _.bindAll(this, 'listJobs', 'runJob', 'runAllJobs');
     },
     listJobs: function () {
         var self = this;
@@ -118,9 +96,21 @@ GD.jobsView = Backbone.View.extend({
         var self = this;
         self.$el.html(self.runTemplate());
         // run remote command and print the results in the iframe
-        // WebSockets? This hack is to easy not to use so no WS fo now.
+        // WebSockets? The iframe method is to easy not to use so no WS for now.
         var frame = $("<iframe id='jobFrame' style='width: 100%; border: none' src='/run/" + id + "'>")
         $("#jobBody").append(frame);
+    },
+    runAllJobs: function (){
+        // first display all jobs
+        var self = this;
+        GD.jobCollection.fetch({
+            success: function (collection, response) {
+                self.$el.html(self.listTemplate({jobs: response}));
+                _.each(response, function(elem){
+                     $.get("/run/" + elem);
+                });
+            }
+        });
     }
 });
 
@@ -128,19 +118,32 @@ GD.logsView = Backbone.View.extend({
     el: '#main',
     listTemplate: _.template($('#logListTemplate').html()),
     viewTemplate: _.template($('#viewLogTemplate').html()),
+    previousPage: "",
+    nextPage: 1,
     initialize: function () {
         _.bindAll(this, 'listLogs', 'viewLog');
     },
-    listLogs: function (id) {
+    listLogs: function (id, page) {
         var self = this;
-        var data = "";
+        var data = {};
+        page = parseInt(page);
+
         if (id) {
-            data = "job=" + id;
+            data["job"] = id;
+        }
+        if (page) {
+            data["page"] = page;
+            self.previousPage = page - 1;
+            self.nextPage = page + 1;
         }
         GD.logCollection.fetch({
             data: data,
             success: function (collection, response) {
-                self.$el.html(self.listTemplate({logs: response}));
+                self.$el.html(self.listTemplate({
+                   logs: response.Entries,
+                   previousPage: self.previousPage,
+                   nextPage: self.nextPage
+                }));
             }
         });
     },
