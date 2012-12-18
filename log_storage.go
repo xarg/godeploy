@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-var logPath = flag.String("d", "./logs", "Logs directory")
+var logPath = flag.String("logs", "./logs", "Logs directory")
 
 type JobLogEntry struct {
 	Path     string  // Path to the log entry

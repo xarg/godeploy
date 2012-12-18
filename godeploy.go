@@ -347,6 +347,10 @@ func DefaultWrapper(handler http.Handler) http.Handler {
 func main() {
 	flag.Parse()
 
+	err := os.Chdir(*CmdDir)
+	if err != nil {
+		log.Fatal(err)
+	}
 	// create the lock
 	commandLock = new(sync.Mutex)
 	http.HandleFunc("/run/", runHandler)
@@ -362,7 +366,7 @@ func main() {
 	// server index.html at the end
 	port := ":8000"
 	log.Printf("Starting on " + port)
-	err := http.ListenAndServe(port, DefaultWrapper(http.DefaultServeMux))
+	err = http.ListenAndServe(port, DefaultWrapper(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal(err)
 	}
