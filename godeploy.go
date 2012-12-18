@@ -145,9 +145,15 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 	header["Connection"] = []string{"close"}
 	header["Vary"] = []string{"User-Agent"}
 
+	// aquiring the lock. Should block here
+	commandLock.Lock()
+	defer commandLock.Unlock()
+ 
 	jobName := request.URL.Path[len("/run/"):]
 	// TODO: fix this and use the HTTP headers with user authentication
 	userName := "Anonymous"
+	
+	// start counting
 	startTime := time.Now().UTC()
 
 	logEntry := JobLogEntry{
@@ -164,14 +170,12 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 	fmt.Fprintf(response, "<pre>"+firstLine)
 	response.(http.Flusher).Flush()
 
+
 	logFilePath, err := NewLogEntry(logEntry, firstLine)
 	if err != nil {
 		log.Print("Failed to create a new log entry: ", err)
 	}
-	// aquiring the lock. This will block the execution
-	commandLock.Lock()
-	defer commandLock.Unlock()
-
+	
 	log.Print("Started job: " + jobName)
 	// We'll use two channels. The error and the command output channel
 	// the error channel is used to get the errors thrown while running
@@ -193,10 +197,10 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 				logFilePath = RenameLogFile(logFilePath, secondsSince, "0")
 				fmt.Fprintf(response, "</pre>") // close <pre>
 				log.Print("Finished job: " + jobName)
+				return
 			}
 			response.(http.Flusher).Flush()
 		case err, _ := <-errChan:
-			log.Print("Received an error: ", err)
 			errStr := ""
 			if err != nil {
 				errStr = err.Error()
@@ -209,7 +213,12 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 					status := msgparts[2]
 					// Rename the log file to store 
 					// the exit status
-					logFilePath = RenameLogFile(logFilePath, time.Since(startTime).Seconds(), status)
+					secondsSince := time.Since(startTime).Seconds()
+					logFilePath = RenameLogFile(logFilePath,
+						secondsSince, status)
+
+					log.Print("Finished job: " + jobName)
+					return
 				}
 			}
 
@@ -217,9 +226,9 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 
 			fmt.Fprintf(response, errStr)
 			response.(http.Flusher).Flush()
-			return
 		}
 	}
+	
 }
 
 // update the log filename with the new duration and 
