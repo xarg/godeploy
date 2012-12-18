@@ -334,6 +334,8 @@ func DefaultWrapper(handler http.Handler) http.Handler {
 }
 
 func main() {
+	flag.Parse()
+
 	// create the lock
 	commandLock = new(sync.Mutex)
 	http.HandleFunc("/run/", runHandler)
