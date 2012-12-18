@@ -19,6 +19,7 @@ import (
 
 // execute commands only from this directory
 var CmdDir = flag.String("dir", "./cmds", "Commands dir")
+var ExcludePat = flag.String("exclude", "", "Exclude shell file name pattern. Ex: *.pyc,a.out")
 
 // this lock is used to not allow 2 commands to run at once
 var commandLock *sync.Mutex
@@ -26,7 +27,6 @@ var commandLock *sync.Mutex
 // return a list of avaiable jobs that can be run
 func jobEntries() ([]string, error) {
 	var entries []string
-	log.Print(*CmdDir)
 	dir, err := os.Open(*CmdDir)
 	if err != nil {
 		return entries, err
@@ -35,7 +35,18 @@ func jobEntries() ([]string, error) {
 
 	dirInfoSlice, _ := dir.Readdir(-1)
 	for _, fileinfo := range dirInfoSlice {
-		entries = append(entries, fileinfo.Name())
+		fileName := fileinfo.Name()
+		excludes := strings.Split(*ExcludePat, ",")
+		matched := false
+		for _, exclude := range excludes {
+			matched, _ = filepath.Match(exclude, fileName)
+			if matched {
+				break
+			}
+		}
+		if !matched {
+			entries = append(entries, fileName)
+		}
 	}
 	return entries, nil
 }
@@ -149,11 +160,11 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 	// aquiring the lock. Should block here
 	commandLock.Lock()
 	defer commandLock.Unlock()
- 
+
 	jobName := request.URL.Path[len("/run/"):]
 	// TODO: fix this and use the HTTP headers with user authentication
 	userName := "Anonymous"
-	
+
 	// start counting
 	startTime := time.Now().UTC()
 
@@ -171,12 +182,11 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 	fmt.Fprintf(response, "<pre>"+firstLine)
 	response.(http.Flusher).Flush()
 
-
 	logFilePath, err := NewLogEntry(logEntry, firstLine)
 	if err != nil {
 		log.Print("Failed to create a new log entry: ", err)
 	}
-	
+
 	log.Print("Started job: " + jobName)
 	// We'll use two channels. The error and the command output channel
 	// the error channel is used to get the errors thrown while running
@@ -229,7 +239,7 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 			response.(http.Flusher).Flush()
 		}
 	}
-	
+
 }
 
 // update the log filename with the new duration and 
@@ -250,7 +260,7 @@ func RenameLogFile(filepath string, duration float64, status string) string {
 // This will be useful for some pagination
 type ResponseLogs struct {
 	Entries JobLogEntries
-	Length int
+	Length  int
 }
 
 /* /logs will return the latest logs ordered by date from the logs folder */
@@ -275,7 +285,7 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		start := 0
-		offset := 50 // number of items per page
+		offset := 50              // number of items per page
 		job := r.FormValue("job") // filter by job is any
 		logEntries := LogEntries(job)
 		logEntriesLen := len(logEntries)
@@ -285,11 +295,11 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 
 		resp := ResponseLogs{
 			Entries: logEntries[start:offset],
-			Length: logEntriesLen,
+			Length:  logEntriesLen,
 		}
 
-		page, err := strconv.ParseInt(r.FormValue("page"), 10, 32);
-		if  err == nil {
+		page, err := strconv.ParseInt(r.FormValue("page"), 10, 32)
+		if err == nil {
 			start = int(page) * offset
 			if start >= resp.Length {
 				start = resp.Length - offset
