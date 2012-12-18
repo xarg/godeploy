@@ -18,7 +18,7 @@ import (
 )
 
 // execute commands only from this directory
-var cmdDir = flag.String("c", "./cmds", "Commands dir")
+var CmdDir = flag.String("dir", "./cmds", "Commands dir")
 
 // this lock is used to not allow 2 commands to run at once
 var commandLock *sync.Mutex
@@ -26,7 +26,8 @@ var commandLock *sync.Mutex
 // return a list of avaiable jobs that can be run
 func jobEntries() ([]string, error) {
 	var entries []string
-	dir, err := os.Open(*cmdDir)
+	log.Print(*CmdDir)
+	dir, err := os.Open(*CmdDir)
 	if err != nil {
 		return entries, err
 	}
@@ -47,7 +48,7 @@ func validateCmd(cmd string) (string, error) {
 	}
 	for _, job := range jobs {
 		if cmd == job {
-			return filepath.Join(*cmdDir, cmd), nil
+			return filepath.Join(*CmdDir, cmd), nil
 		}
 	}
 	return "", errors.New("Command not found")
