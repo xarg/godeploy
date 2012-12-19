@@ -12,7 +12,8 @@ var GD = {
         this.router = new this.Router();
         Backbone.history.start();
         this.router.navigate('listLogs', {trigger: true});
-    }
+    },
+    scroller: null // used to scroll the iframe
 };
 
 /* Router */
@@ -97,8 +98,17 @@ GD.jobsView = Backbone.View.extend({
         self.$el.html(self.runTemplate());
         // run remote command and print the results in the iframe
         // WebSockets? The iframe method is to easy not to use so no WS for now.
-        var frame = $("<iframe id='jobFrame' style='width: 100%; border: none' src='/run/" + id + "'>")
+        var frame = $("<iframe id='jobFrame' style='width: 100%; border: none' src='/run/" + id + "'>");
         $("#jobBody").append(frame);
+        // we scroll automatically at the bottom of the page
+        if (GD.scroller !== null){
+            clearTimeout(scroller);
+        }
+        function scrollFrame(){
+            $("#jobFrame")[0].contentWindow.scrollBy(0, 1000);
+            scroller = setTimeout("scrollFrame()", 100);
+        }
+        scrollFrame();
     },
     runAllJobs: function (){
         // first display all jobs
