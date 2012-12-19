@@ -104,6 +104,7 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 	}
 
 	cmd := exec.Command(cmdPath)
+	cmd.Dir = *CmdDir
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		errChan <- err
@@ -347,10 +348,6 @@ func DefaultWrapper(handler http.Handler) http.Handler {
 func main() {
 	flag.Parse()
 
-	err := os.Chdir(*CmdDir)
-	if err != nil {
-		log.Fatal(err)
-	}
 	// create the lock
 	commandLock = new(sync.Mutex)
 	http.HandleFunc("/run/", runHandler)
@@ -366,7 +363,7 @@ func main() {
 	// server index.html at the end
 	port := ":8000"
 	log.Printf("Starting on " + port)
-	err = http.ListenAndServe(port, DefaultWrapper(http.DefaultServeMux))
+	err := http.ListenAndServe(port, DefaultWrapper(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal(err)
 	}
