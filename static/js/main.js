@@ -77,6 +77,10 @@ GD.logCollection = Backbone.Collection.extend({
 });
 
 
+GD.scrollFrame = function () {
+    $("#jobFrame")[0].contentWindow.scrollBy(0, 1000);
+    GD.scroller = setTimeout("GD.scrollFrame()", 100);
+}
 /* Views */
 GD.jobsView = Backbone.View.extend({
     el: '#main',
@@ -102,13 +106,9 @@ GD.jobsView = Backbone.View.extend({
         $("#jobBody").append(frame);
         // we scroll automatically at the bottom of the page
         if (GD.scroller !== null){
-            clearTimeout(scroller);
+            clearTimeout(GD.scroller);
         }
-        function scrollFrame(){
-            $("#jobFrame")[0].contentWindow.scrollBy(0, 1000);
-            scroller = setTimeout("scrollFrame()", 100);
-        }
-        scrollFrame();
+        GD.scrollFrame();
     },
     runAllJobs: function (){
         // first display all jobs
