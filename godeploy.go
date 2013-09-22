@@ -19,7 +19,8 @@ import (
 
 // execute commands only from this directory
 var CmdDir = flag.String("dir", "./cmds", "Commands dir")
-var ExcludePat = flag.String("exclude", "", "Exclude shell file name pattern. Ex: *.pyc,a.out")
+var ExcludePat = flag.String("exclude", "",
+	"Exclude shell file name pattern. Ex: *.pyc,a.out")
 
 // this lock is used to not allow 2 commands to run at once
 var commandLock *sync.Mutex
