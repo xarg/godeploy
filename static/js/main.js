@@ -160,7 +160,7 @@ GD.logsView = Backbone.View.extend({
     viewLog: function (id) {
         var self = this;
         GD.logCollection.fetch({
-            data: "name=" + id,
+            data: "id=" + id,
             success: function (collection, response) {
                 self.$el.html(self.viewTemplate({body: response.body}));
             }

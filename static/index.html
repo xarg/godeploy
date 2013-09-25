@@ -74,15 +74,14 @@
                   <th>Job</th>
                   <th>User</th>
                   <th>Date Started</th>
-                  <th>Duration</th>
+                  <th>Date Ended</th>
                   <th>&nbsp;</th>
               </tr>
               <% if ($.isEmptyObject(logs)) { %>
                   <tr><td colspan='4'>No Record Found</td></tr>
               <% } else {
-                  $.each(logs, function () { 
-                  date = new Date(this.Time * 1000); %>
-                  <tr data-id=<%= this.Path %>>
+                  $.each(logs, function () { %>
+                  <tr data-id=<%= this.Id  %>>
 		      <td>
 			<% if (this.Status == 0 ) { %>
 			<span class="label label-success">Success</span>
@@ -93,10 +92,10 @@
 		      </td>
                       <td><%= this.Name %></td>
                       <td><%= this.User %></td>
-                      <td><%= date %></td>
-		      <td><%= this.Duration %>s</td>
+                      <td><%= this.Start %></td>
+                      <!-- <td><%= this.End %></td> -->
                       <td align='center'>
-                        <a class="btn" href='#/viewLog/<%= this.Path %>'>View</a>
+                        <a class="btn" href='#/viewLog/<%= this.Id %>'>View</a>
                       </td>
                   </tr>
                   <%

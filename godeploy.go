@@ -25,7 +25,7 @@ var ExcludePat = flag.String("exclude", "",
 // this lock is used to not allow 2 commands to run at once
 var commandLock *sync.Mutex
 
-// return a list of avaiable jobs that can be run
+// return a list of available jobs that can be run
 func jobEntries() ([]string, error) {
 	var entries []string
 	dir, err := os.Open(*CmdDir)
@@ -105,7 +105,6 @@ func runCommand(command string, outChan chan string, errChan chan error) {
 	}
 
 	cmd := exec.Command(cmdPath)
-	cmd.Dir = *CmdDir
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		errChan <- err
@@ -167,32 +166,25 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 	// TODO: fix this and use the HTTP headers with user authentication
 	userName := "Anonymous"
 
-	// start counting
-	startTime := time.Now().UTC()
-
+	// create a new log entry
 	logEntry := JobLogEntry{
-		Name: jobName,
-		User: userName,
-		Time: startTime.Unix(),
+		Name:  jobName,
+		User:  userName,
+		Start: time.Now().UTC(),
 	}
 
-	firstLine := "Started at " + startTime.Format("Mon Jan 2 15:04:05 -0700 MST 2006") + " by " + userName
-	firstLine = firstLine + "\n==========================\n\n"
 	// Adding a <pre> here because we want pretty output
 	// the browser. We close it at end when we finished reading
 	// from the command's output
-	fmt.Fprintf(response, "<pre>"+firstLine)
+	fmt.Fprintf(response, "<pre>")
 	response.(http.Flusher).Flush()
 
-	logFilePath, err := NewLogEntry(logEntry, firstLine)
-	if err != nil {
-		log.Print("Failed to create a new log entry: ", err)
-	}
+	logId := NewLogEntry(logEntry)
 
-	log.Print("Started job: " + jobName)
+	log.Printf("Started job: %s: %s", logId, jobName)
 	// We'll use two channels. The error and the command output channel
 	// the error channel is used to get the errors thrown while running
-	// the job and the output channel is for returning the output of 
+	// the job and the output channel is for returning the output of
 	// the command
 	outChan := make(chan string)
 	errChan := make(chan error)
@@ -202,12 +194,11 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 	for {
 		select {
 		case content, closed := <-outChan:
-			AppendLog(logFilePath, content)
+			AppendLog(logId, content)
 			fmt.Fprintf(response, content)
 
 			if !closed {
-				secondsSince := time.Since(startTime).Seconds()
-				logFilePath = RenameLogFile(logFilePath, secondsSince, "0")
+				UpdateLog(logId, time.Now().UTC(), "0")
 				fmt.Fprintf(response, "</pre>") // close <pre>
 				log.Print("Finished job: " + jobName)
 				return
@@ -217,46 +208,29 @@ func runHandler(response http.ResponseWriter, request *http.Request) {
 			errStr := ""
 			if err != nil {
 				errStr = err.Error()
-				// TODO: maybe there is another way to get the 
+				// TODO: maybe there is another way to get the
 				// exit status?
 				if strings.Contains(errStr, "exit status") {
 					// Ex: exit status 0
 					msgparts := strings.Split(err.Error(), " ")
 					// Ex: we get "0" here
 					status := msgparts[2]
-					// Rename the log file to store 
+					// Rename the log file to store
 					// the exit status
-					secondsSince := time.Since(startTime).Seconds()
-					logFilePath = RenameLogFile(logFilePath,
-						secondsSince, status)
+					UpdateLog(logId, time.Now().UTC(), status)
 
 					log.Print("Finished job: " + jobName)
 					return
 				}
 			}
 
-			AppendLog(logFilePath, errStr)
+			AppendLog(logId, errStr)
 
 			fmt.Fprintf(response, errStr)
 			response.(http.Flusher).Flush()
 		}
 	}
 
-}
-
-// update the log filename with the new duration and 
-func RenameLogFile(filepath string, duration float64, status string) string {
-	parts := strings.Split(filepath, "-")
-	durationStr := strconv.FormatFloat(duration, 'f', 0, 64)
-
-	parts[4] = durationStr
-	parts[5] = status
-	newLogPath := strings.Join(parts, "-")
-	err := os.Rename(filepath, newLogPath)
-	if err != nil {
-		log.Print("Failed to rename log file ", err)
-	}
-	return newLogPath
 }
 
 // This will be useful for some pagination
@@ -272,13 +246,11 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 	header["Content-Type"] = []string{"application/json"}
 	// if we have a name of the log then we should get the contents of the log
 	var dataJson []byte
-	if r.FormValue("name") != "" {
+	var err error
+	if r.FormValue("id") != "" {
+		var body string
 		data := make(map[string]string, 1)
-		body, err := LogEntryBody(r.FormValue("name"))
-		if err != nil {
-			log.Print("Failed to get log entry body ", err)
-			fmt.Fprintf(w, err.Error())
-		}
+		body, err = LogEntryBody(r.FormValue("id"))
 
 		data["body"] = string(body)
 		dataJson, err = json.Marshal(data)
@@ -288,7 +260,7 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		start := 0
 		offset := 50              // number of items per page
-		job := r.FormValue("job") // filter by job is any
+		job := r.FormValue("job") // filter by job name
 		logEntries := LogEntries(job)
 		logEntriesLen := len(logEntries)
 		if offset >= logEntriesLen {

@@ -1,124 +1,133 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
-	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
+	_ "github.com/mattn/go-sqlite3"
+	"log"
+	"time"
 )
 
-var logPath = flag.String("logs", "./logs", "Logs directory")
+var DbPath = flag.String("db", "/tmp/db.sqlite3", "Logs database")
 
 type JobLogEntry struct {
-	Path     string  // Path to the log entry
-	Name     string  // job name
-	User     string  // the user that started the
-	Time     int64   // when was it started
-	Duration float64 // duration in seconds
-	Status   int64   // 0-255 - status code returned by the job
+	Id     string // job id
+	Name   string // job name
+	User   string // the user that started the
+	Start  time.Time
+	End    time.Time
+	Body   string // when was it started
+	Status int64  // 0-255 - status code returned by the job
 }
 
 type JobLogEntries []*JobLogEntry
 
-func (s JobLogEntries) Len() int      { return len(s) }
-func (s JobLogEntries) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-// ByTime implements sort.Interface by providing Less and using the Len and
-// Swap methods of the embedded JobLogEntry value.
-type ByTime struct{ JobLogEntries }
-
-// most recent first
-func (s ByTime) Less(i, j int) bool {
-	return s.JobLogEntries[i].Time > s.JobLogEntries[j].Time
-}
-
-//Create a new log file, write the data and return the filepath
-func NewLogEntry(job JobLogEntry, data string) (string, error) {
-	// log files have the following form: 
-	// GD-<job-name>-<user>-<time>-<duration>
-	newLogFile := "GD-" + job.Name
-	newLogFile += "-" + job.User
-	newLogFile += "-" + fmt.Sprintf("%d", job.Time)
-	newLogFile += "-" + fmt.Sprintf("%d", int(job.Duration))
-	newLogFile += "-" + fmt.Sprintf("%d", job.Status)
-
-	newLogFile = filepath.Join(*logPath, newLogFile)
-	fd, err := os.Create(newLogFile)
-	defer fd.Close()
-	if err == nil {
-		_, err = fd.WriteString(data)
-		if err != nil {
-			return newLogFile, err
-		}
-	} else {
-		return "", err
+// Create a new database and it's schema if it doesn't exist and return the db
+func getDB() *sql.DB {
+	db, err := sql.Open("sqlite3", *DbPath)
+	if err != nil {
+		log.Fatal(err)
 	}
-	return newLogFile, nil
+
+	sql := `create table if not exists log (
+        id integer not null primary key autoincrement,
+        name text,
+        user text,
+        start_dt datetime,
+        end_dt datetime default null,
+        body text default "",
+        status integer default null
+    )`
+	_, err = db.Exec(sql)
+	if err != nil {
+		log.Fatal("%q: %s\n", err, sql)
+	}
+	return db
 }
 
-// given the names of the job return all the log job entries ordered by time
+//Create a new log and return it's id
+func NewLogEntry(job JobLogEntry) string {
+	db := getDB()
+	defer db.Close()
+
+	sql := "insert into log (name, user, start_dt) values (?, ?, ?)"
+	_, err := db.Exec(sql, job.Name, job.User, job.Start)
+
+	if err != nil {
+		log.Fatalf("%q: %s\n", err, sql)
+	}
+
+	id := ""
+	err = db.QueryRow("select last_insert_rowid()").Scan(&id)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return id
+}
+
+// Given the names of the job return all the log job entries ordered by time
 func LogEntries(job string) JobLogEntries {
 	var entries JobLogEntries
-	filepath.Walk(*logPath,
-		func(path string, info os.FileInfo, err error) error {
-			// forward the error
-			if err != nil {
-				return err
-			}
-			// don't bother with logPath itself
-			if path == *logPath {
-				return nil
-			}
-			fileName := info.Name()
-			if fileName[:2] == "GD" {
-				parts := strings.Split(fileName, "-")
-				jobName, userName, time, duration, status := parts[1], parts[2], parts[3], parts[4], parts[5]
-				if job != "" && jobName != job {
-					// filter by job's name if set
-					return nil
-				}
-				timeInt, _ := strconv.ParseInt(time, 10, 64)
-				durationFloat, _ := strconv.ParseFloat(duration, 64)
-				statusInt, _ := strconv.ParseInt(status, 10, 64)
-				logEntry := &JobLogEntry{
-					Path:     fileName,
-					Name:     jobName,
-					User:     userName,
-					Time:     timeInt,
-					Duration: durationFloat,
-					Status:   statusInt,
-				}
-				entries = append(entries, logEntry)
-			}
-			return nil
-		})
-	// sort ByTime
-	sort.Sort(ByTime{entries})
+
+	db := getDB()
+    defer db.Close()
+
+	// datetime is not parsed correctly for some reason.
+	rows, err := db.Query(`select id, name, user, start_dt, end_dt, status
+        from log`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		jobLog := new(JobLogEntry)
+        start := new(time.Time)
+        end := new(time.Time)
+		rows.Scan(&jobLog.Id, &jobLog.Name, &jobLog.User, &start, &end,
+            &jobLog.Status)
+        jobLog.Start = *start
+        if end != nil {
+            jobLog.End = *end
+        }
+		entries = append(entries, jobLog)
+	}
 	return entries
 }
 
-/* Read the log entry file contents and return it */
-func LogEntryBody(name string) ([]byte, error) {
-	path := filepath.Join(*logPath, name)
-	return ioutil.ReadFile(path)
+// Read the log entry file contents and return it
+func LogEntryBody(id string) (string, error) {
+	body := ""
+	db := getDB()
+	defer db.Close()
+
+	err := db.QueryRow("select body from log where id = ?", id).Scan(&body)
+	return body, err
 }
 
 // append a string to a log file
-func AppendLog(logFilePath, log string) error {
-	// os.APPEND does not work here for some reason
-	// Why? Is it a bug? 
-	// We Seek to the end of the file instead
-	logFileFd, err := os.OpenFile(logFilePath, os.O_WRONLY, 0666)
-	defer logFileFd.Close()
+func AppendLog(id, body string) {
+	db := getDB()
+	defer db.Close()
 
-	if err != nil {
-		return err
-	}
-	logFileFd.Seek(0, os.SEEK_END)
-	logFileFd.WriteString(log)
-	return nil
+    oldBody := ""
+    if (body != ""){
+        err := db.QueryRow("select body from log where id = ?", id).Scan(&oldBody)
+        if err != nil {
+            return;
+        }
+        body = oldBody + body
+
+        sql := "update log set body = ? where id = ?"
+        db.Exec(sql, body, id)
+    }
 }
+
+// update the log filename with the new duration and
+func UpdateLog(id string, endTime time.Time, status string) {
+	db := getDB()
+	defer db.Close()
+	sql := "update log set end = ?, status = ? where id = ?"
+	db.Exec(sql, endTime.String(), status, id)
+}
+
