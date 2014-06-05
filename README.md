@@ -7,6 +7,12 @@ Just point to the your fabric scripts and logs directories and that's it.
 
 ![Screenshot godeploy](https://raw.github.com/gymglish/godeploy/master/static/screenshot_godeploy.png)
 
+
+Installation
+------------
+
+	go get github.com/humanfromearth/godeploy
+
 Usage
 -----
 
