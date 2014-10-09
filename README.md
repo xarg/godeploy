@@ -11,7 +11,7 @@ Just point to the your fabric scripts and logs directories and that's it.
 Installation
 ------------
 
-	go get github.com/humanfromearth/godeploy
+	go get github.com/xarg/godeploy
 
 Usage
 -----
